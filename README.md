@@ -1,5 +1,5 @@
 # bilibli-down
-下载[b站](http://www.bilibili.com/)上的番剧(http://bangumi.bilibili.com/anime/1089)和视频集合(http://www.bilibili.com/video/av390875/)
+下载[b站](http://www.bilibili.com/)上的番剧[http://bangumi.bilibili.com/anime/1089](http://bangumi.bilibili.com/anime/1089)和视频集合[http://www.bilibili.com/video/av390875/](http://www.bilibili.com/video/av390875/)
 
 # 使用
 1. 运行main.py，输入上述链接之一即可下载，下载的动漫保存在"D:\\动漫\\'动漫名'"目录下。
