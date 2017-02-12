@@ -8,7 +8,9 @@ import re
 import time
 import json
 import traceback
+import configparser
 from urllib import parse
+from subprocess import check_output
 
 import requests
 import lxml.html
@@ -28,12 +30,12 @@ def correct_file_name(file_name):
     return re.sub(r'[\\/:*?"<>|]', '', file_name)
 
 
-def net_video_sniffer(url, full_hd=True, retry=3):
+def net_video_sniffer(url, full_hd=True, retry=5):
     """
     用flvcd的网页进行在线视频嗅探
     :param url: 在线视频url
     :param full_hd: 是否解析超清视频
-    :param 重试次数，可选
+    :param retry: 重试次数，可选
     :return: 列表，视频的下载链接
     """
     api = 'http://www.flvcd.com/parse.php'
@@ -47,7 +49,7 @@ def net_video_sniffer(url, full_hd=True, retry=3):
             tree = lxml.html.fromstring(s.get(api, params=params).text)
             temp = tree.cssselect('input[name=inf]')
             return [x for x in temp[0].get(
-                'value').split('|') if x] if temp else []
+                'value').split('|') if x]
         except Exception as error:
             if i >= retry - 1:
                 raise ValueError('在线视频{}解析错误 {}'.format(url, str(error)))
@@ -88,110 +90,95 @@ def get_bangumi_info(bangumi_id):
 
 
 def main():
-    print('请输入b站番剧链接：', end='')
-    index = input()  # 'http://bangumi.bilibili.com/anime/2261/play#50529'
+    # 读取配置文件
+    cfg = configparser.ConfigParser()
+    cfg.read('main.ini')
+    # 读取代理
+    try:
+        proxy = cfg.get('main', 'proxy')
+    except configparser.Error:  # 默认代理
+        proxy = None
+    # 读取目录
+    try:
+        save_dir = cfg.get('main', 'dir')
+    except configparser.Error:  # 默认目录
+        save_dir = 'D:/动漫'
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    # 读取链接
+    try:
+        index = cfg.get('main', 'url')
+        print('b站番剧链接：', index)
+    except configparser.Error:  # 用户输入
+        print('请输入b站番剧链接：', end='')
+        index = input()
     print('解析中……\n')
 
-    if re.match(r'http[s]?://bangumi.bilibili.com/anime/', index):
-        # 通过番剧id获取番剧信息
+    if re.match(r'http[s]?://bangumi.bilibili.com/anime/\d+', index):
+        # 获取番剧信息
         bangumi_id = int(re.findall(r'\d+', index)[0])
         info = get_bangumi_info(bangumi_id)
+
+        # 更新目录
         bangumi_title = '{} {}'.format(info['bangumi_title'],
                                        info['season_title'])
+        save_dir = '{}/{}'.format(save_dir, correct_file_name(bangumi_title))
+        info['episodes'].reverse()
+        # 获取url和标题
+        video_url_list = [ep['webplay_url'] for ep in info['episodes']]
+        video_title_list = [ep['index_title'] for ep in info['episodes']]
 
         # 输出信息
         print('番剧名称：{}\n番剧简介：{}'.format(bangumi_title,
                                         info['evaluate'].strip()))
         print('共{}话'.format(len(info['episodes'])))
 
-        # 设定保存文件夹
-        bangumi_dir = 'D:\\动漫\\{}'.format(bangumi_title)
-        if not os.path.exists(bangumi_dir):
-            os.mkdir(bangumi_dir)
-
-        # 遍历视频页面
-        info['episodes'].reverse()
-        for i, episode in enumerate(info['episodes']):
-            print('下载第{}话……'.format(i + 1))
-            # 设置文件前缀
-            episode_title = 'Ep{:0>2}{}'.format(i + 1, '.{}'.format(
-                episode['index_title']) if episode['index_title'] else '')
-
-            # 获取视频下载链接
-            download_list = net_video_sniffer(episode['webplay_url'])
-
-            # 准备下载
-            down_man = ARIA2C(bangumi_title)
-            for part_index, url in enumerate(download_list):
-                file_type = url_file_type(url)
-                # 设定文件名
-                if len(download_list) == 1:
-                    file_name = '{}.{}'.format(episode_title, file_type)
-                else:
-                    file_name = '{}_part{:0>2}.{}'.format(
-                        episode_title, part_index, file_type)
-
-                file_name = correct_file_name(file_name)
-                # 添加进队列
-                down_man.add_task(url, bangumi_dir, file_name)
-
-            # 下载
-            down_man.start()
-
     elif re.match('http[s]?://www.bilibili.com/video/av\d+/.*', index):
+        # 获取番剧信息
         global s
         r = s.get(re.sub(r'index_\d+.html', '', index))
         tree = lxml.html.fromstring(r.text)
-
-        # 获取标题、简介
-        bangumi_title = tree.cssselect('div.v\-title h1')[0].text
-        bangumi_title = correct_file_name(bangumi_title)
         evaluate = tree.cssselect(
             'meta[name=description]')[0].get('content')
 
+        # 更新目录
+        bangumi_title = tree.cssselect('div.v\-title h1')[0].text
+        save_dir = '{}/{}'.format(save_dir, correct_file_name(bangumi_title))
         # 获取视频列表
-        video_list = tree.cssselect('div#plist option')
-        video_title_list = [x.text for x in video_list]
-        video_list = [parse.urljoin(index, x.get('value'))
-                      for x in video_list]
+        part_list = tree.cssselect('div#plist option')
+        video_url_list = [parse.urljoin(index, x.get('value'))
+                          for x in part_list]
+        video_title_list = [x.text.split('、', 1)[-1] for x in part_list]
+
         # 输出信息
         print('番剧名称：{}\n番剧简介：{}'.format(bangumi_title, evaluate))
-        print('共{}话'.format(len(video_list)))
+        print('共{}话'.format(len(part_list)))
 
-        # 设定保存文件夹
-        bangumi_dir = 'D:\\动漫\\{}'.format(bangumi_title)
-        if not os.path.exists(bangumi_dir):
-            os.mkdir(bangumi_dir)
-
-        # 遍历视频页面
-        for i, video_url in enumerate(video_list):
-            print('下载第{}话……'.format(i + 1))
-            # 设置文件前缀
-            episode_title = 'Ep{:0>2}.{}'.format(
-                i + 1, video_title_list[i].split('、', 1)[-1])
-
-            # 获取视频下载链接
-            download_list = net_video_sniffer(video_url)
-
-            # 准备下载
-            down_man = ARIA2C(bangumi_title)
-            for part_index, url in enumerate(download_list):
-                file_type = url_file_type(url)
-                # 设定文件名
-                if len(download_list) == 1:
-                    file_name = '{}.{}'.format(episode_title, file_type)
-                else:
-                    file_name = '{}_part{:0>2}.{}'.format(
-                        episode_title, part_index, file_type)
-
-                file_name = correct_file_name(file_name)
-                # 添加进队列
-                down_man.add_task(url, bangumi_dir, file_name)
-
-            # 下载
-            down_man.start()
     else:
         print('url解析错误')
+        return
+
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    epf = 'Ep{:0>2}.{}.flv'
+    if len(video_url_list) > 100:
+        epf = 'Ep{:0>3}.{}.flv'
+    # 下载
+    for i, url in enumerate(video_url_list):
+        print('下载第{:0>2}话……'.format(i + 1))
+        file_name = epf.format(i + 1, video_title_list[i])
+
+        down_man = ARIA2C(correct_file_name(bangumi_title))
+        down_url_list = net_video_sniffer(url)
+        if len(down_url_list) > 1:
+            for part_i, part_url in enumerate(down_url_list):
+                part_file = '{}.part{:0>2}'.format(file_name, part_i)
+                down_man.add_task(part_url, save_dir, part_file,
+                                  proxy=proxy)
+        else:
+            down_man.add_task(down_url_list[0], save_dir, file_name,
+                              proxy=proxy)
+        down_man.start()
 
 
 if __name__ == '__main__':

@@ -76,13 +76,14 @@ class ARIA2C:
         """
         return len(self.tasks)
 
-    def add_task(self, url, file_dir, file_name, headers=None):
+    def add_task(self, url, file_dir, file_name, headers=None, proxy=None):
         """
         添加任务到下载队列
         :param url: 下载链接
         :param file_dir: 保存目录，绝对路径
         :param file_name: 保存文件名
         :param headers: http headers，可选
+        :param proxy: 代理，可选
         :return: bool，链接重复、文件已存在返回False
         """
         if url in self.tasks:
@@ -97,6 +98,8 @@ class ARIA2C:
                            'file_name': file_name}
         if headers:
             self.tasks[url]['headers'] = headers
+        if proxy:
+            self.tasks[url]['proxy'] = proxy
         return True
 
     def start(self):
@@ -121,6 +124,9 @@ class ARIA2C:
                 f.write(' out={}\n'.format(self.tasks[url]['file_name']))
                 # 其他
                 f.write(' continue=true\n max-connection-per-server=10\n')
+                proxy = self.tasks[url].get('proxy', None)
+                if proxy:
+                    f.write(' all-proxy={}\n'.format(proxy))
                 f.write(' split=10\n min-split-size=1M\n')
                 if i < len(self.tasks) - 1:
                     f.write('\n')
