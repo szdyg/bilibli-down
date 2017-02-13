@@ -1,5 +1,5 @@
 # bilibli-down
-下载[b站](http://www.bilibili.com/)上的番剧[http://bangumi.bilibili.com/anime/1089](http://bangumi.bilibili.com/anime/1089)和视频集合[http://www.bilibili.com/video/av390875/](http://www.bilibili.com/video/av390875/)
+下载[b站](http://www.bilibili.com/)上的番剧（如[http://bangumi.bilibili.com/anime/1089](http://bangumi.bilibili.com/anime/1089)）和视频集合（如[http://www.bilibili.com/video/av390875/](http://www.bilibili.com/video/av390875/)）
 
 # 使用
 1. 修改main.ini，再运行main.py即可下载，动漫保存目录由main.ini中的main-->dir指定，proxy代理可选。
