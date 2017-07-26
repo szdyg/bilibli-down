@@ -48,6 +48,7 @@ class IDM:
         command = '"{}" /s'.format(self.idm_path)
         # 这个命令是启动idm的下载队列
         # 但idm 6.27 build3在win10 x64下执行这条命令时会崩溃
+        # 只能在idm应用内操作了
         # subprocess.Popen(command)
         print(command)
 

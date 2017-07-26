@@ -3,165 +3,106 @@
 """
 Created by tzw0745 on 2017/2/6.
 """
-import configparser
-import json
 import os
 import re
+import shutil
 import traceback
-from subprocess import check_output
-from urllib.parse import urljoin
+import configparser
 
-import lxml.html
-import requests
-
-from Module.downloader import ARIA2C
-
-s = requests.session()
+from Module.Downloader import ARIA2C
+from Module.Bilibili import Bilibili
 
 
-def correct_file_name(file_name):
+def merge_video(video_list, out):
     """
-    删除文件名中非法字符
-    :param file_name: 文件名
-    :return: 删除非法字符后的文件名
+    合并视频文件
+    :param video_list: 要合并的视频文件列表
+    :param out: 视频输出路径
+    :return: 无
     """
-    return re.sub(r'[\\/:*?"<>|]', '', file_name)
-
-
-def net_video_sniffer(url):
-    """
-    用you-get进行在线视频嗅探
-    :param url: 在线视频url
-    :return: 列表，视频的下载链接
-    """
-    cmd = 'you-get.exe --json "{}"'.format(url)
-    output = check_output(cmd)
-    try:
-        result = json.loads(output.decode('gbk'))
-    except UnicodeDecodeError:
-        result = json.loads(output.decode('utf-8'))
-    return {'src': result['streams']['__default__']['src'],
-            'type': result['streams']['__default__']['container']}
-
-
-def url_file_type(url):
-    """
-    从url中获取文件扩展名
-    :param url: url
-    :return: 文件扩展名
-    """
-    short = url.split('?')[0].split('/')[-1]
-    candidates = re.findall(r'\.([a-zA-Z0-9]{2,5})', short)
-    return candidates[-1] if candidates else ''
-
-
-def get_bangumi_info(bangumi_id):
-    """
-    获取b站番剧信息
-    :param bangumi_id: 番剧id，纯数字
-    :return: 字典信息
-    """
-    try:
-        bangumi_id = int(bangumi_id)
-    except ValueError:
-        raise KeyError('番剧id必须为纯数字: {}'.format(bangumi_id))
-
-    global s
-    url = 'http://bangumi.bilibili.com/jsonp/seasoninfo/{}.ver'
-    r = s.get(url.format(bangumi_id))
-    r.encoding = r.apparent_encoding
-    temp = r.text
-    result = json.loads(temp[temp.find('{'): temp.rfind('}') + 1])
-    if result['code'] != 0:
-        raise ValueError(result['message'])
-
-    return result['result']
+    with open('merge.txt', 'w', encoding='utf-8') as f:
+        f.write('\n'.join("file '{}'".format(x)
+                          for x in video_list))
+    cmd = 'ffmpeg -f concat -safe 0 -i merge.txt -c copy "{}"'
+    os.system(cmd.format(out))
+    os.remove('merge.txt')
 
 
 def main():
     # 读取配置文件
     cfg = configparser.ConfigParser()
-    cfg.read('main.ini')
+    cfg.read('main.ini', encoding='utf-8')
     proxy = cfg.get('main', 'proxy', fallback=None)
     save_dir = cfg.get('main', 'dir', fallback='D:/动漫')
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
+    cache_dir = cfg.get('main', 'cache', fallback='D:/temp')
+    # 如果配置文件未指定url，则从控制台输入
     try:
         target = cfg.get('main', 'url')
         print('b站番剧链接：', target)
-    except configparser.Error:  # 用户输入
-        print('请输入b站番剧链接：', end='')
+    except configparser.Error:
+        print('请输入b站番剧链接：', end='', flush=True)
         target = input()
     if target[-1] != '/':
         target = '{}/'.format(target)
     print('解析中……\n')
 
-    if re.match(r'http[s]?://bangumi.bilibili.com/anime/\d+[/?].*', target):
-        # 获取番剧信息
+    bilibili = Bilibili()
+    # 获取番剧信息
+    if re.match(r'^http[s]?://bangumi.bilibili.com/anime/\d+[/?].*', target):
         bangumi_id = int(re.findall(r'/(\d+)[/?].*', target)[0])
-        info = get_bangumi_info(bangumi_id)
-
-        # 动漫保存文件夹
-        bangumi_title = '{} {}'.format(info['bangumi_title'],
-                                       info['season_title'])
-        save_dir = '{}/{}'.format(save_dir, correct_file_name(bangumi_title))
-        info['episodes'].reverse()
-        # url和标题
-        ep_url_list = [ep['webplay_url'] for ep in info['episodes']]
-        ep_title_list = [ep['index_title'] for ep in info['episodes']]
-
-        print('番剧名称：{}\n番剧简介：{}'.format(bangumi_title,
-                                        info['evaluate'].strip()))
-        print('共{}话'.format(len(info['episodes'])))
-
     elif re.match('http[s]?://www.bilibili.com/video/av\d+[/?].*', target):
-        # 获取番剧信息
-        global s
-        tree = lxml.html.fromstring(s.get(target).text)
-        evaluate = tree.cssselect(
-            'meta[name=description]')[0].get('content')
-
-        # 动漫保存文件夹
-        bangumi_title = tree.cssselect('div.v\-title h1')[0].text
-        save_dir = '{}/{}'.format(save_dir, correct_file_name(bangumi_title))
-        # url和标题
-        play_list = tree.cssselect('div#plist option')
-        ep_url_list = [urljoin(target, x.get('value')) for x in play_list]
-        ep_title_list = [x.text.split('、', 1)[1] for x in play_list]
-
-        # 输出信息
-        print('番剧名称：{}\n番剧简介：{}'.format(bangumi_title, evaluate))
-        print('共{}话'.format(len(play_list)))
-
+        bangumi_id = int(re.findall(r'/(av\d+)[/?].*', target)[0])
     else:
-        print('url解析错误')
-        return
-    if not ep_url_list:
-        return
+        raise ValueError('url not match')
+    info = bilibili.get_bangumi_info(bangumi_id)
+    print('番剧名称：{}\n番剧简介：{}'.format(info['title'], info['intro']))
+    print('共{}话'.format(len(info['eps'])))
 
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
-    epf = 'Ep{:0>2}.{}.{}' if len(ep_url_list) < 100 else 'Ep{:0>3}.{}.{}'
-    ep_title_list = [correct_file_name(x) for x in ep_title_list]
-    # 开始下载
-    for i, url in enumerate(ep_url_list):
+    # 设置保存路径、缓存路径
+    os.mkdir(save_dir) if not os.path.exists(save_dir) else None
+    save_dir = '/'.join([save_dir, info['title']])
+    os.mkdir(save_dir) if not os.path.exists(save_dir) else None
+    os.mkdir(cache_dir) if not os.path.exists(cache_dir) else None
+
+    # 设置下载器、下载参数、文件名格式
+    down_man = ARIA2C('/'.join([cache_dir, info['title']]))
+    headers = {'Referer': 'http://www.bilibili.com/'}
+    epf = 'Ep{:0>2}.{}.{}' if len(info['eps']) < 100 else 'Ep{:0>3}.{}.{}'
+    # 遍历番剧章节
+    for i, ep in enumerate(info['eps']):
         print('下载第{:0>2}话……'.format(i + 1))
-        temp = net_video_sniffer(url)
+        # 获取章节视频信息
+        video_info = bilibili.video_url_list(ep['url'])
 
-        file_name = epf.format(i + 1, ep_title_list[i], temp['type'])
+        # 设置目标文件名、缓存文件名
+        file_name = epf.format(i + 1, ep['title'], video_info['type'])
         file_name = file_name.replace('..', '.')
+        final_file = '/'.join([save_dir, file_name])
+        temp_file = '/'.join([cache_dir, file_name])
+        if os.path.exists(final_file):
+            continue
 
-        down_man = ARIA2C(correct_file_name(bangumi_title))
-        down_url_list = temp['src']
-        if len(down_url_list) > 1:
-            for part_i, part_url in enumerate(down_url_list):
+        # 判断是否需要分段下载
+        part_list = []
+        if len(video_info['src']) > 1:
+            for part_i, part_url in enumerate(video_info['src']):
                 part_file = '{}.part{:0>2}'.format(file_name, part_i)
-                down_man.add_task(part_url, save_dir, part_file,
-                                  proxy=proxy)
-        else:
-            down_man.add_task(down_url_list[0], save_dir, file_name,
-                              proxy=proxy)
+                part_list.append('/'.join([cache_dir, part_file]))
+                down_man.add_task(part_url, cache_dir, part_file,
+                                  headers=headers, proxy=proxy)
+        elif len(video_info['src']) == 1:
+            down_man.add_task(video_info['src'][0], cache_dir, file_name,
+                              headers=headers, proxy=proxy)
         down_man.start()
+
+        # 缓存文件to目标文件
+        if os.path.exists(temp_file):
+            shutil.move(temp_file, final_file)
+        else:
+            merge_video(part_list, temp_file)
+            shutil.move(temp_file, final_file)
+            for x in part_list:
+                os.remove(x)
 
 
 if __name__ == '__main__':
@@ -170,7 +111,8 @@ if __name__ == '__main__':
         print(split_line)
         main()
         print('\nall done')
-    except:
+    except Exception as e:
+        print(str(e))
         print(traceback.format_exc())
     finally:
         print(split_line)

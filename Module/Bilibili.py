@@ -74,7 +74,7 @@ class Bilibili:
         """
         if not url.startswith('http://bangumi.bilibili.com/anime/') and \
                 not url.startswith('http://www.bilibili.com/video/'):
-            raise ValueError('url not correct')
+            raise ValueError('url not match')
         you_get = you_get if you_get else 'you-get.exe'
         cmd = '{} --json {}'.format(you_get, url)
         output = check_output(cmd)
