@@ -5,7 +5,6 @@ Created by tzw0745 on 2017/2/7.
 """
 import os
 import time
-import traceback
 import subprocess
 import collections
 
@@ -48,8 +47,9 @@ class IDM:
         """
         command = '"{}" /s'.format(self.idm_path)
         # 这个命令是启动idm的下载队列
-        # 但idm 6.27 build3在win10 x64下执行这条命令会崩溃
+        # 但idm 6.27 build3在win10 x64下执行这条命令时会崩溃
         # subprocess.Popen(command)
+        print(command)
 
 
 class ARIA2C:

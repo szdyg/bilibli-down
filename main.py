@@ -3,18 +3,18 @@
 """
 Created by tzw0745 on 2017/2/6.
 """
+import configparser
+import json
 import os
 import re
-import json
 import traceback
-import configparser
-from urllib.parse import urljoin
 from subprocess import check_output
+from urllib.parse import urljoin
 
-import requests
 import lxml.html
+import requests
 
-from downloader import ARIA2C, IDM
+from Module.downloader import ARIA2C
 
 s = requests.session()
 
