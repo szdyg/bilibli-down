@@ -13,6 +13,14 @@ from Module.Downloader import ARIA2C
 from Module.Bilibili import Bilibili
 
 
+def correct_file_name(file_name):
+    file_name = file_name.replace('\\', '＼').replace('/', '、')
+    file_name = file_name.replace(':', '：').replace('*', '×')
+    file_name = file_name.replace('?', '？').replace('"', '＂')
+    file_name = file_name.replace('<', '＜').replace('>', '＞')
+    return file_name.replace('|', '｜')
+
+
 def merge_video(video_list, out):
     """
     合并视频文件
@@ -51,10 +59,11 @@ def main():
     if re.match(r'^http[s]?://bangumi.bilibili.com/anime/\d+[/?].*', target):
         bangumi_id = int(re.findall(r'/(\d+)[/?].*', target)[0])
     elif re.match('http[s]?://www.bilibili.com/video/av\d+[/?].*', target):
-        bangumi_id = int(re.findall(r'/(av\d+)[/?].*', target)[0])
+        bangumi_id = re.findall(r'/(av\d+)[/?].*', target)[0]
     else:
         raise ValueError('url not match')
     info = bilibili.get_bangumi_info(bangumi_id)
+    info['title'] = correct_file_name(info['title'])
     print('番剧名称：{}\n番剧简介：{}'.format(info['title'], info['intro']))
     print('共{}话'.format(len(info['eps'])))
 
