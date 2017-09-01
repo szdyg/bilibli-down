@@ -52,16 +52,18 @@ def main():
         target = input()
     if target[-1] != '/':
         target = '{}/'.format(target)
+    target = target.lower()
     print('解析中……\n')
 
     bilibili = Bilibili()
     # 获取番剧信息
     if re.match(r'^http[s]?://bangumi.bilibili.com/anime/\d+[/?].*', target):
         bangumi_id = int(re.findall(r'/(\d+)[/?].*', target)[0])
-    elif re.match('http[s]?://www.bilibili.com/video/av\d+[/?].*', target):
+    elif re.match(r'http[s]?://www.bilibili.com/video/av\d+[/?].*', target):
         bangumi_id = re.findall(r'/(av\d+)[/?].*', target)[0]
     else:
-        raise ValueError('url not match')
+        raise ValueError('bangumi id not found')
+
     info = bilibili.get_bangumi_info(bangumi_id)
     info['title'] = correct_file_name(info['title'])
     print('番剧名称：{}\n番剧简介：{}'.format(info['title'], info['intro']))

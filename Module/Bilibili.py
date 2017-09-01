@@ -4,6 +4,7 @@
 Created by tzw0745 on 2017/7/26.
 """
 import re
+import time
 import json
 from urllib import parse
 from subprocess import check_output
@@ -24,10 +25,13 @@ class Bilibili:
         """
         bangumi_id = str(bangumi_id)
         if re.match(r'^\d+$', bangumi_id):
-            host = 'http://bangumi.bilibili.com/'
-            url = '{}jsonp/seasoninfo/{}.ver'.format(host, bangumi_id)
-            r = self.session.get(url)
-            if r.status_code == 404:
+            url = '{}bangumi.bilibili.com/jsonp/seasoninfo/{}.ver'
+            for protocol in ['http://', 'https://']:
+                r = self.session.get(url.format(protocol, bangumi_id))
+                if r.status_code != 404:
+                    break
+                time.sleep(1)
+            else:
                 raise ValueError('404 not found')
             r.encoding = 'utf-8'
             text = r.text
@@ -39,7 +43,7 @@ class Bilibili:
                    for x in data['episodes']]
             eps.reverse()
         elif re.match(r'^av\d+$', bangumi_id):
-            host = 'http://www.bilibili.com/'
+            host = 'https://www.bilibili.com/'
             url = '{}video/{}/'.format(host, bangumi_id)
             r = self.session.get(url)
             if r.status_code == 404:
@@ -72,9 +76,11 @@ class Bilibili:
         :param you_get: you-get.exe 文件路径
         :return: 视频文件列表和文件类型
         """
-        if not url.startswith('http://bangumi.bilibili.com/anime/') and \
-                not url.startswith('http://www.bilibili.com/video/'):
+        url = url.lower()
+        if not re.match(r'http[s]?://bangumi.bilibili.com/anime/', url) and \
+            not re.match(r'http[s]?://www.bilibili.com/video/', url):
             raise ValueError('url not match')
+
         you_get = you_get if you_get else 'you-get.exe'
         cmd = '{} --json {}'.format(you_get, url)
         output = check_output(cmd)
